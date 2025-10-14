@@ -28,6 +28,7 @@ interface UserInfo {
   anh_dai_dien?: string;
   email?: string;
   ten_dang_nhap?: string;
+  diem_so?: number;
 }
 
 export default function ThongTinCaNhanScreen() {
@@ -414,6 +415,15 @@ export default function ThongTinCaNhanScreen() {
               <Ionicons name="camera" size={22} color="#791228" />
             </TouchableOpacity>
           </View>
+          
+          {/* Điểm hiện tại */}
+          <View style={styles.pointsContainer}>
+            <View style={styles.pointsCard}>
+              <Ionicons name="star" size={24} color="#FFD700" />
+              <Text style={styles.pointsLabel}>Điểm hiện tại</Text>
+              <Text style={styles.pointsValue}>{userInfo?.diem_so || 0}</Text>
+            </View>
+          </View>
         </View>
 
         {/* FORM */}
@@ -671,6 +681,31 @@ const styles = StyleSheet.create({
   profileHeader: {
     alignItems: 'center',
     paddingVertical: 20,
+  },
+  pointsContainer: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  pointsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  pointsLabel: {
+    color: '#fffcef',
+    fontSize: 14,
+    marginLeft: 8,
+    marginRight: 8,
+  },
+  pointsValue: {
+    color: '#FFD700',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   avatarContainer: {
     position: 'relative',

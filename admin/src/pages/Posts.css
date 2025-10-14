@@ -1,0 +1,157 @@
+.posts-page {
+  max-width: 1400px;
+}
+
+.filter-select {
+  padding: 10px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  background: white;
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+}
+
+.filter-select:focus {
+  border-color: var(--primary-color);
+}
+
+.posts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 20px;
+}
+
+.post-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.post-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.post-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.post-title {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text-primary);
+  flex: 1;
+  line-height: 1.4;
+}
+
+.post-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.post-status.dang_ban {
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+
+.post-status.da_ban {
+  background: #FFF3E0;
+  color: #F57C00;
+}
+
+.post-status.an {
+  background: #FFEBEE;
+  color: #C62828;
+}
+
+.post-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.post-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-light);
+  border-radius: 8px;
+}
+
+.post-detail-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.detail-label {
+  color: var(--text-secondary);
+}
+
+.detail-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.detail-value.price {
+  color: var(--primary-color);
+  font-weight: 700;
+}
+
+.post-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.no-data {
+  background: white;
+  border-radius: 12px;
+  padding: 60px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.no-data p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  .posts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .filter-select {
+    flex: 1;
+    min-width: 150px;
+  }
+}
+
+
+
+
+

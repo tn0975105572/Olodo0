@@ -1,5 +1,6 @@
 const likebaidang = require('../models/likebaidang');
 const { v4: uuidv4 } = require("uuid");
+const pool = require("../config/database");
 
 exports.getAll = async (req, res) => {
     try {
@@ -24,8 +25,57 @@ exports.getById = async (req, res) => {
 exports.insert = async (req, res) => {
   try {
     const newData = req.body;
+    const userId = newData.ID_NguoiDung;
+    const postId = newData.ID_BaiDang;
+
+    // Kiểm tra đã like chưa
+    const existingLike = await likebaidang.checkUserLiked(postId, userId);
+    if (existingLike) {
+      return res.status(400).json({ 
+        message: "Bạn đã like bài đăng này rồi" 
+      });
+    }
+
     const newId = await likebaidang.insert(newData);
-    res.status(201).json({ ID_Like: newId, message: "Thêm mới thành công" });
+
+    // Thêm điểm cho người like
+    try {
+      await pool.query('CALL AddPointsToUser(?, ?, ?, ?, ?)', [
+        userId,
+        2, // +2 điểm khi like
+        'like',
+        'Like bài đăng',
+        postId
+      ]);
+    } catch (pointError) {
+      console.error('Error adding points for like:', pointError);
+    }
+
+    // Thêm điểm cho chủ bài đăng
+    try {
+      // Lấy thông tin chủ bài đăng
+      const [postOwner] = await pool.query(
+        'SELECT ID_NguoiDung FROM baidang WHERE ID_BaiDang = ?',
+        [postId]
+      );
+      
+      if (postOwner[0] && postOwner[0].ID_NguoiDung !== userId) {
+        await pool.query('CALL AddPointsToUser(?, ?, ?, ?, ?)', [
+          postOwner[0].ID_NguoiDung,
+          3, // +3 điểm khi nhận like
+          'nhan_like',
+          'Nhận like cho bài đăng',
+          postId
+        ]);
+      }
+    } catch (pointError) {
+      console.error('Error adding points for received like:', pointError);
+    }
+
+    res.status(201).json({ 
+      ID_Like: newId, 
+      message: "Like thành công, đã nhận 2 điểm" 
+    });
   } catch (error) {
     res.status(500).json({ message: "Lỗi máy chủ", error });
   }

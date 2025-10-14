@@ -32,6 +32,7 @@ interface PostType {
 
 interface UserInfo {
   ID_NguoiDung: string;
+  diem_so?: number;
   [key: string]: any;
 }
 
@@ -72,6 +73,7 @@ const CreatePostScreen: React.FC = () => {
   // UI states
   const [isPosting, setIsPosting] = useState<boolean>(false);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
+  const [userPoints, setUserPoints] = useState<number>(0);
 
   // API Data
   const [categories, setCategories] = useState<Category[]>([]);
@@ -81,6 +83,13 @@ const CreatePostScreen: React.FC = () => {
   const loadInitialData = useCallback(async (): Promise<void> => {
     try {
       setIsLoadingData(true);
+
+      // Load user points
+      const userJson = await AsyncStorage.getItem('userInfo');
+      if (userJson) {
+        const userData = JSON.parse(userJson);
+        setUserPoints(userData.diem_so || 0);
+      }
 
       const [categoriesRes, postTypesRes] = await Promise.all([
         fetch(`${API_BASE_URL}/danhmuc/getAll`),
@@ -409,6 +418,22 @@ const CreatePostScreen: React.FC = () => {
         return;
       }
 
+      // Kiểm tra điểm trước khi đăng bài
+      const currentPoints = userInfo.diem_so || 0;
+      const requiredPoints = 20;
+      
+      if (currentPoints < requiredPoints) {
+        Alert.alert(
+          'Không đủ điểm',
+          `Bạn cần ít nhất ${requiredPoints} điểm để đăng bài.\n\nĐiểm hiện tại: ${currentPoints} điểm\nCần thêm: ${requiredPoints - currentPoints} điểm\n\nHãy tương tác với các bài đăng khác để kiếm thêm điểm!`,
+          [
+            { text: 'OK', style: 'default' }
+          ]
+        );
+        setIsPosting(false);
+        return;
+      }
+
       const postData: PostData = {
         ID_NguoiDung: userInfo.ID_NguoiDung,
         ID_LoaiBaiDang: postTypeId,
@@ -525,7 +550,42 @@ const CreatePostScreen: React.FC = () => {
         console.log('Uploaded URLs:', uploadedImageUrls);
       }
 
-      Alert.alert('Thành công', 'Bài đăng đã được tạo thành công!', [
+      // Cập nhật điểm ngay lập tức
+      const newPoints = currentPoints - 20;
+      setUserPoints(newPoints);
+
+      // Cập nhật AsyncStorage với điểm mới
+      try {
+        const updatedUserInfo = { ...userInfo, diem_so: newPoints };
+        await AsyncStorage.setItem('userInfo', JSON.stringify(updatedUserInfo));
+      } catch (error) {
+        console.error('Error updating user info:', error);
+      }
+
+      // Đồng bộ điểm từ server để đảm bảo chính xác
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        const userResponse = await fetch(`${API_BASE_URL}/nguoidung/getById/${userInfo.ID_NguoiDung}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          if (userData && userData.diem_so !== undefined) {
+            // Cập nhật với dữ liệu từ server
+            const serverUpdatedUserInfo = { ...userInfo, diem_so: userData.diem_so };
+            await AsyncStorage.setItem('userInfo', JSON.stringify(serverUpdatedUserInfo));
+            setUserPoints(userData.diem_so);
+          }
+        }
+      } catch (serverError) {
+        console.error('Error syncing points from server:', serverError);
+        // Nếu không sync được từ server, vẫn dùng điểm đã tính toán
+      }
+
+      Alert.alert('Thành công', `Bài đăng đã được tạo thành công!\n\nĐã trừ 20 điểm từ tài khoản của bạn.\nĐiểm còn lại: ${newPoints} điểm`, [
         {
           text: 'OK',
           onPress: () => {
@@ -820,6 +880,21 @@ const CreatePostScreen: React.FC = () => {
           <View>
             <Text style={styles.sectionTitle}>Thông tin cơ bản</Text>
 
+            {/* Thông báo về điểm */}
+            <View style={[styles.pointsNotice, userPoints < 20 ? styles.pointsNoticeWarning : styles.pointsNoticeSuccess]}>
+              <MaterialCommunityIcons 
+                name={userPoints < 20 ? "alert-circle" : "check-circle"} 
+                size={20} 
+                color={userPoints < 20 ? "#F44336" : "#4CAF50"} 
+              />
+              <Text style={[styles.pointsNoticeText, userPoints < 20 ? styles.pointsNoticeTextWarning : styles.pointsNoticeTextSuccess]}>
+                {userPoints < 20 
+                  ? `Cần ít nhất 20 điểm để đăng bài (hiện tại: ${userPoints} điểm)`
+                  : `Đủ điểm để đăng bài (${userPoints} điểm)`
+                }
+              </Text>
+            </View>
+
             <TextInput
               style={styles.input}
               placeholder="Tiêu đề bài đăng"
@@ -969,7 +1044,10 @@ const CreatePostScreen: React.FC = () => {
             />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Tạo bài đăng</Text>
-          <View style={{ width: 24 }} />
+          <View style={styles.pointsHeader}>
+            <MaterialCommunityIcons name="star" size={20} color="#FFD700" />
+            <Text style={styles.pointsText}>{userPoints}</Text>
+          </View>
         </View>
 
         <StepIndicator />
@@ -1028,6 +1106,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#1a1a1a',
+    flex: 1,
+    textAlign: 'center',
+  },
+  pointsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  pointsText: {
+    marginLeft: 4,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFD700',
   },
   subHeader: {
     fontSize: 20,
@@ -1446,6 +1542,36 @@ const styles = StyleSheet.create({
   modalItemTextSelected: {
     color: '#8B3538',
     fontWeight: '600',
+  },
+  // Points notice styles
+  pointsNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  pointsNoticeWarning: {
+    backgroundColor: '#ffebee',
+    borderWidth: 1,
+    borderColor: '#ffcdd2',
+  },
+  pointsNoticeSuccess: {
+    backgroundColor: '#e8f5e8',
+    borderWidth: 1,
+    borderColor: '#c8e6c9',
+  },
+  pointsNoticeText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  pointsNoticeTextWarning: {
+    color: '#d32f2f',
+  },
+  pointsNoticeTextSuccess: {
+    color: '#2e7d32',
   },
 });
 

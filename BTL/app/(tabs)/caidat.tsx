@@ -61,7 +61,7 @@ const VerificationStatus = ({ isVerified, onPress }) => {
 };
 
 // ✅ UserProfile (Avatar và Text đã LỚN HƠN)
-const UserProfile = ({ name, email, avatar, isVerified, onEditPress, onVerificationPress }) => {
+const UserProfile = ({ name, email, avatar, isVerified, points, onEditPress, onVerificationPress }) => {
   const avatarStyle = [
     styles.avatar, // Đã áp dụng size mới từ styles
     { borderColor: isVerified ? '#4CAF50' : '#FF9800' },
@@ -81,6 +81,12 @@ const UserProfile = ({ name, email, avatar, isVerified, onEditPress, onVerificat
       <View style={styles.profileInfo}>
         <Text style={styles.name}>{name}</Text>
         <Text style={styles.email}>{email}</Text>
+        
+        {/* Hiển thị điểm */}
+        <View style={styles.pointsContainer}>
+          <Ionicons name="star" size={16} color="#FFD700" />
+          <Text style={styles.pointsText}>{points || 0} điểm</Text>
+        </View>
       </View>
 
       {/* Tách riêng VerificationStatus và EditButton ra khỏi profileInfo */}
@@ -224,6 +230,7 @@ const AccountScreen = () => {
             email={userInfo.email || userInfo.ten_dang_nhap || 'Không có email'}
             avatar={userInfo.anh_dai_dien || 'https://i.pravatar.cc/150'}
             isVerified={isVerified}
+            points={userInfo.diem_so}
             onEditPress={() => router.push('/caidat/thongtincanhan')}
             onVerificationPress={handleVerificationPress}
           />
@@ -240,6 +247,16 @@ const AccountScreen = () => {
               icon="person-outline"
               label="Thông tin cá nhân"
               onPress={() => router.push('/components/CaiDat/thongtincanhan')}
+            />
+            <SettingsItem
+              icon="star-outline"
+              label="Tích điểm & Lịch sử"
+              onPress={() => router.push('/components/CaiDat/tichdiem')}
+            />
+            <SettingsItem
+              icon="play-circle-outline"
+              label="Xem Video Kiếm Điểm"
+              onPress={() => router.push('/components/CaiDat/xemvideo')}
             />
             <SettingsItem
               icon="lock-closed-outline"
@@ -408,6 +425,17 @@ const styles = StyleSheet.create({
   email: {
     fontSize: 15, // ✅ Tăng kích thước
     color: '#888',
+  },
+  pointsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  pointsText: {
+    fontSize: 14,
+    color: '#FFD700',
+    fontWeight: '600',
+    marginLeft: 4,
   },
   // Nhóm các action bên phải
   profileActions: {

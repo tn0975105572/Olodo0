@@ -1,5 +1,6 @@
 const binhluanbaidang = require('../models/binhluanbaidang');
 const { v4: uuidv4 } = require('uuid'); // Dùng để tạo ID duy nhất
+const pool = require("../config/database");
 
 // Lấy tất cả
 exports.getAll = async (req, res) => {
@@ -61,8 +62,49 @@ exports.insert = async (req, res) => {
     try {
         const newId = uuidv4();
         const newData = { ID_BinhLuan: newId, ...req.body };
+        const userId = newData.ID_NguoiDung;
+        const postId = newData.ID_BaiDang;
+        
         await binhluanbaidang.insert(newData);
-        res.status(201).json({ id: newId, message: 'Thêm mới thành công' });
+
+        // Thêm điểm cho người bình luận
+        try {
+            await pool.query('CALL AddPointsToUser(?, ?, ?, ?, ?)', [
+                userId,
+                5, // +5 điểm khi bình luận
+                'binh_luan',
+                'Bình luận bài đăng',
+                postId
+            ]);
+        } catch (pointError) {
+            console.error('Error adding points for comment:', pointError);
+        }
+
+        // Thêm điểm cho chủ bài đăng
+        try {
+            // Lấy thông tin chủ bài đăng
+            const [postOwner] = await pool.query(
+                'SELECT ID_NguoiDung FROM baidang WHERE ID_BaiDang = ?',
+                [postId]
+            );
+            
+            if (postOwner[0] && postOwner[0].ID_NguoiDung !== userId) {
+                await pool.query('CALL AddPointsToUser(?, ?, ?, ?, ?)', [
+                    postOwner[0].ID_NguoiDung,
+                    10, // +10 điểm khi nhận bình luận
+                    'nhan_binh_luan',
+                    'Nhận bình luận cho bài đăng',
+                    postId
+                ]);
+            }
+        } catch (pointError) {
+            console.error('Error adding points for received comment:', pointError);
+        }
+
+        res.status(201).json({ 
+            id: newId, 
+            message: 'Bình luận thành công, đã nhận 5 điểm' 
+        });
     } catch (error) {
         res.status(500).json({ message: 'Lỗi máy chủ', error });
     }

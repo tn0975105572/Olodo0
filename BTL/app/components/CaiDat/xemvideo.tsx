@@ -1,0 +1,467 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  SafeAreaView,
+  Image,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+
+const API_BASE_URL = Constants.expoConfig!.extra!.apiUrl as string;
+
+interface UserInfo {
+  ID_NguoiDung: string;
+  ho_ten?: string;
+  diem_so?: number;
+}
+
+const XemVideoScreen = () => {
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isWatching, setIsWatching] = useState(false);
+  const [watchProgress, setWatchProgress] = useState(0);
+  const [hasWatchedToday, setHasWatchedToday] = useState(false);
+  const [isWatchingVideo, setIsWatchingVideo] = useState(false);
+  const [watchTimer, setWatchTimer] = useState(0);
+
+  // Video thumbnails - có thể thay đổi thành video thật
+  const videoThumbnails = [
+    'https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg',
+    'https://img.youtube.com/vi/jNQXAC9IVRw/maxresdefault.jpg',
+    'https://img.youtube.com/vi/9bZkp7q19f0/maxresdefault.jpg',
+  ];
+
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+
+  const loadUserData = useCallback(async () => {
+    try {
+      const userJson = await AsyncStorage.getItem('userInfo');
+      if (userJson) {
+        const userData = JSON.parse(userJson);
+        setUserInfo(userData);
+      }
+    } catch (error) {
+      console.error('Lỗi khi tải thông tin người dùng:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const checkTodayWatched = useCallback(async () => {
+    try {
+      const today = new Date().toDateString();
+      const watchedToday = await AsyncStorage.getItem(`watched_video_${today}`);
+      setHasWatchedToday(!!watchedToday);
+    } catch (error) {
+      console.error('Lỗi khi kiểm tra video đã xem:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadUserData();
+    checkTodayWatched();
+  }, [loadUserData, checkTodayWatched]);
+
+  const startWatching = () => {
+    if (hasWatchedToday) {
+      Alert.alert('Thông báo', 'Bạn đã xem video hôm nay rồi!');
+      return;
+    }
+
+    setIsWatchingVideo(true);
+    setWatchProgress(0);
+    setWatchTimer(0);
+
+    // Simulate watching video for 15 seconds
+    const interval = setInterval(() => {
+      setWatchTimer(prev => {
+        const newTime = prev + 1;
+        const progress = (newTime / 15) * 100;
+        setWatchProgress(progress);
+
+        if (newTime >= 15) {
+          clearInterval(interval);
+          setIsWatchingVideo(false);
+          awardPoints();
+        }
+
+        return newTime;
+      });
+    }, 1000);
+  };
+
+  const awardPoints = async () => {
+    if (!userInfo?.ID_NguoiDung) return;
+
+    setIsWatching(true);
+    
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      
+      // Gọi API để cộng điểm
+      const response = await fetch(`${API_BASE_URL}/api/lich_su_tich_diem/addPoints`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          userId: userInfo.ID_NguoiDung,
+          pointChange: 100,
+          transactionType: 'tang_diem',
+          description: 'Xem video quảng cáo',
+          referenceId: null,
+        }),
+      });
+
+      if (response.ok) {
+        await response.json();
+        
+        // Cập nhật điểm trong AsyncStorage
+        const newPoints = (userInfo.diem_so || 0) + 100;
+        const updatedUserInfo = { ...userInfo, diem_so: newPoints };
+        await AsyncStorage.setItem('userInfo', JSON.stringify(updatedUserInfo));
+        setUserInfo(updatedUserInfo);
+
+        // Đánh dấu đã xem hôm nay
+        const today = new Date().toDateString();
+        await AsyncStorage.setItem(`watched_video_${today}`, 'true');
+        setHasWatchedToday(true);
+
+        Alert.alert(
+          'Chúc mừng!',
+          `Bạn đã nhận được 100 điểm!\n\nĐiểm hiện tại: ${newPoints} điểm`,
+          [{ text: 'Tuyệt vời!', style: 'default' }]
+        );
+      } else {
+        throw new Error('Không thể cộng điểm');
+      }
+    } catch (error) {
+      console.error('Lỗi khi cộng điểm:', error);
+      Alert.alert('Lỗi', 'Không thể cộng điểm. Vui lòng thử lại.');
+    } finally {
+      setIsWatching(false);
+    }
+  };
+
+  const nextVideo = () => {
+    if (currentVideoIndex < videoThumbnails.length - 1) {
+      setCurrentVideoIndex(currentVideoIndex + 1);
+      setWatchProgress(0);
+    }
+  };
+
+  const prevVideo = () => {
+    if (currentVideoIndex > 0) {
+      setCurrentVideoIndex(currentVideoIndex - 1);
+      setWatchProgress(0);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#791228" />
+        <Text style={styles.loadingText}>Đang tải...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Xem Video Kiếm Điểm</Text>
+        <View style={styles.pointsContainer}>
+          <Ionicons name="star" size={20} color="#FFD700" />
+          <Text style={styles.pointsText}>{userInfo?.diem_so || 0}</Text>
+        </View>
+      </View>
+
+      {/* Thông tin */}
+      <View style={styles.infoCard}>
+        <View style={styles.infoItem}>
+          <Ionicons name="play-circle" size={24} color="#4CAF50" />
+          <Text style={styles.infoText}>Xem video 15 giây để nhận 100 điểm</Text>
+        </View>
+        <View style={styles.infoItem}>
+          <Ionicons name="time" size={24} color="#FF9800" />
+          <Text style={styles.infoText}>Mỗi ngày chỉ được xem 1 lần</Text>
+        </View>
+        {hasWatchedToday && (
+          <View style={styles.infoItem}>
+            <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+            <Text style={styles.infoText}>Bạn đã xem video hôm nay</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Video Player */}
+      <View style={styles.videoContainer}>
+        <View style={styles.videoThumbnail}>
+          <Image
+            source={{ uri: videoThumbnails[currentVideoIndex] }}
+            style={styles.thumbnailImage}
+            resizeMode="cover"
+          />
+          {isWatchingVideo && (
+            <View style={styles.watchingOverlay}>
+              <ActivityIndicator size="large" color="#fff" />
+              <Text style={styles.watchingText}>Đang xem video...</Text>
+            </View>
+          )}
+        </View>
+        
+        {/* Progress Bar */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${watchProgress}%` }]} />
+          </View>
+          <Text style={styles.progressText}>
+            {isWatchingVideo ? `${watchTimer}/15s` : `${Math.round(watchProgress)}%`}
+          </Text>
+        </View>
+
+        {/* Video Controls */}
+        <View style={styles.controlsContainer}>
+          <TouchableOpacity
+            style={[styles.controlButton, currentVideoIndex === 0 && styles.disabledButton]}
+            onPress={prevVideo}
+            disabled={currentVideoIndex === 0 || isWatchingVideo}
+          >
+            <Ionicons name="chevron-back" size={24} color="#fff" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.playButton, (hasWatchedToday || isWatchingVideo) && styles.disabledButton]}
+            onPress={startWatching}
+            disabled={hasWatchedToday || isWatchingVideo}
+          >
+            <Ionicons name={isWatchingVideo ? "pause" : "play"} size={32} color="#fff" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.controlButton, currentVideoIndex === videoThumbnails.length - 1 && styles.disabledButton]}
+            onPress={nextVideo}
+            disabled={currentVideoIndex === videoThumbnails.length - 1 || isWatchingVideo}
+          >
+            <Ionicons name="chevron-forward" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Status */}
+      {hasWatchedToday ? (
+        <View style={styles.statusCard}>
+          <Ionicons name="checkmark-circle" size={48} color="#4CAF50" />
+          <Text style={styles.statusTitle}>Đã hoàn thành!</Text>
+          <Text style={styles.statusText}>Bạn đã xem video và nhận điểm hôm nay</Text>
+          <Text style={styles.statusSubText}>Quay lại vào ngày mai để xem video mới</Text>
+        </View>
+      ) : (
+        <View style={styles.statusCard}>
+          <Ionicons name="play-circle" size={48} color="#FF9800" />
+          <Text style={styles.statusTitle}>Sẵn sàng kiếm điểm!</Text>
+          <Text style={styles.statusText}>Nhấn play và xem video 15 giây</Text>
+          <Text style={styles.statusSubText}>Bạn sẽ nhận được 100 điểm</Text>
+        </View>
+      )}
+
+      {/* Loading overlay */}
+      {isWatching && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#791228" />
+          <Text style={styles.loadingText}>Đang cộng điểm...</Text>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    marginTop: 10,
+    color: '#666',
+    fontSize: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#791228',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  pointsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  pointsText: {
+    marginLeft: 4,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFD700',
+  },
+  infoCard: {
+    backgroundColor: '#fff',
+    margin: 20,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  infoText: {
+    marginLeft: 12,
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+  },
+  videoContainer: {
+    margin: 20,
+    backgroundColor: '#000',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  videoThumbnail: {
+    width: '100%',
+    height: 200,
+    position: 'relative',
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  watchingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  watchingText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 10,
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  progressBar: {
+    flex: 1,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 2,
+    marginRight: 12,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#4CAF50',
+    borderRadius: 2,
+  },
+  progressText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  controlsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  controlButton: {
+    padding: 12,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  disabledButton: {
+    opacity: 0.3,
+  },
+  playButton: {
+    padding: 16,
+    borderRadius: 35,
+    backgroundColor: '#4CAF50',
+  },
+  statusCard: {
+    backgroundColor: '#fff',
+    margin: 20,
+    padding: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  statusTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  statusText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  statusSubText: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
+
+export default XemVideoScreen;

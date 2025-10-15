@@ -2,20 +2,19 @@ const express = require("express");
 const router = express.Router();
 const tichdiemController = require("../controllers/tichdiem");
 
-// Định nghĩa các route
+// Lấy tất cả giao dịch tích điểm với phân trang
 router.get("/getAll", tichdiemController.getAll);
-router.get("/getById/:id", tichdiemController.getById);
-router.get("/getByType/:loai", tichdiemController.getByType);
-router.get("/getActivePoints", tichdiemController.getActivePoints);
-router.get("/getExchangePoints", tichdiemController.getExchangePoints);
-router.post("/create", tichdiemController.create);
-router.put("/update/:id", tichdiemController.update);
-router.delete("/delete/:id", tichdiemController.delete);
-router.post("/exchange", tichdiemController.exchange);
+
+// Lấy giao dịch theo ID người dùng
+router.get("/getByUserId/:userId", tichdiemController.getByUserId);
+
+// Thêm điểm cho người dùng
+router.post("/addPoints", tichdiemController.addPoints);
+
+// Lấy thống kê điểm số
+router.get("/stats", tichdiemController.getStats);
+
+// Lấy top người dùng
+router.get("/topUsers", tichdiemController.getTopUsers);
 
 module.exports = router;
-
-
-
-
-

@@ -1,130 +1,132 @@
-const tichdiem = require('../models/tichdiem');
-const { v4: uuidv4 } = require('uuid');
+const tichdiem = require("../models/tichdiem");
 
+// Lấy tất cả giao dịch tích điểm với phân trang
 exports.getAll = async (req, res) => {
-    try {
-        const data = await tichdiem.getAll();
-        res.json(data);
-    } catch (error) {
-        res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
-    }
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const userId = req.query.userId || null;
+    const offset = (page - 1) * limit;
+
+    const { data, total } = await tichdiem.getAllPaginated(limit, offset, userId);
+
+    res.json({
+      success: true,
+      data: data,
+      total: total,
+      page: page,
+      limit: limit,
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    console.error("Error getting points history:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi máy chủ",
+      error: error.message,
+    });
+  }
 };
 
-exports.getById = async (req, res) => {
-    try {
-        const id = req.params.id;
-        const data = await tichdiem.getById(id);
-        if (!data) {
-            return res.status(404).json({ message: 'Tích điểm không tồn tại' });
-        }
-        res.json(data);
-    } catch (error) {
-        res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
-    }
+// Lấy giao dịch theo ID người dùng
+exports.getByUserId = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const data = await tichdiem.getByUserId(userId);
+
+    res.json({
+      success: true,
+      data: data,
+    });
+  } catch (error) {
+    console.error("Error getting user points history:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi máy chủ",
+      error: error.message,
+    });
+  }
 };
 
-exports.getByType = async (req, res) => {
-    try {
-        const { loai } = req.params;
-        const data = await tichdiem.getByType(loai);
-        res.json(data);
-    } catch (error) {
-        res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+// Thêm điểm cho người dùng
+exports.addPoints = async (req, res) => {
+  try {
+    const { userId, pointChange, transactionType, description, referenceId } = req.body;
+
+    if (!userId || !pointChange || !transactionType) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin bắt buộc",
+      });
     }
+
+    // Thêm giao dịch vào lịch sử
+    const transactionData = {
+      ID_NguoiDung: userId,
+      thay_doi_diem: pointChange,
+      loai_giao_dich: transactionType,
+      mo_ta: description || '',
+      ID_tham_chieu: referenceId || null
+    };
+
+    await tichdiem.add(transactionData);
+
+    // Cập nhật điểm số người dùng
+    await tichdiem.updateUserPoints(userId, pointChange);
+
+    res.json({
+      success: true,
+      message: "Thêm điểm thành công",
+    });
+  } catch (error) {
+    console.error("Error adding points:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi máy chủ",
+      error: error.message,
+    });
+  }
 };
 
-exports.getActivePoints = async (req, res) => {
-    try {
-        const data = await tichdiem.getActivePoints();
-        res.json(data);
-    } catch (error) {
-        res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
-    }
+// Lấy thống kê điểm số
+exports.getStats = async (req, res) => {
+  try {
+    const stats = await tichdiem.getStats();
+    const topUsers = await tichdiem.getTopUsers(10);
+
+    res.json({
+      success: true,
+      data: {
+        stats,
+        topUsers
+      },
+    });
+  } catch (error) {
+    console.error("Error getting points stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi máy chủ",
+      error: error.message,
+    });
+  }
 };
 
-exports.getExchangePoints = async (req, res) => {
-    try {
-        const data = await tichdiem.getExchangePoints();
-        res.json(data);
-    } catch (error) {
-        res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
-    }
+// Lấy top người dùng
+exports.getTopUsers = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const topUsers = await tichdiem.getTopUsers(limit);
+
+    res.json({
+      success: true,
+      data: topUsers,
+    });
+  } catch (error) {
+    console.error("Error getting top users:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi máy chủ",
+      error: error.message,
+    });
+  }
 };
-
-exports.create = async (req, res) => {
-    try {
-        const newData = {
-            ID_TichDiem: uuidv4(),
-            ...req.body
-        };
-        const insertId = await tichdiem.insert(newData);
-        res.status(201).json({ id: insertId, message: 'Thêm mới thành công' });
-    } catch (error) {
-        res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
-    }
-};
-
-exports.update = async (req, res) => {
-    try {
-        const id = req.params.id;
-        const updatedData = req.body;
-        const affectedRows = await tichdiem.update(id, updatedData);
-        if (affectedRows === 0) {
-            return res.status(404).json({ message: 'Tích điểm không tồn tại' });
-        }
-        res.json({ message: 'Cập nhật thành công' });
-    } catch (error) {
-        res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
-    }
-};
-
-exports.delete = async (req, res) => {
-    try {
-        const id = req.params.id;
-        const affectedRows = await tichdiem.delete(id);
-        if (affectedRows === 0) {
-            return res.status(404).json({ message: 'Tích điểm không tồn tại' });
-        }
-        res.json({ message: 'Xóa thành công' });
-    } catch (error) {
-        res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
-    }
-};
-
-exports.exchange = async (req, res) => {
-    try {
-        const { userId, tichdiemId } = req.body;
-        
-        // Kiểm tra có thể trao đổi không
-        const canExchange = await tichdiem.canExchange(tichdiemId);
-        if (!canExchange) {
-            return res.status(400).json({ message: 'Không thể trao đổi tích điểm này' });
-        }
-
-        // Gọi stored procedure để trao đổi điểm
-        const pool = require('../config/database');
-        const [result] = await pool.query('CALL ExchangePoints(?, ?)', [userId, tichdiemId]);
-        
-        if (result[0][0].result === 'SUCCESS') {
-            res.json({ 
-                message: 'Trao đổi thành công', 
-                newPoints: result[0][0].new_points 
-            });
-        } else {
-            res.status(400).json({ 
-                message: result[0][0].result === 'INSUFFICIENT_POINTS' ? 
-                    'Không đủ điểm để trao đổi' : 
-                    result[0][0].result === 'OUT_OF_STOCK' ? 
-                        'Hết số lượng trao đổi' : 
-                        'Không tìm thấy tích điểm'
-            });
-        }
-    } catch (error) {
-        res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
-    }
-};
-
-
-
-
-

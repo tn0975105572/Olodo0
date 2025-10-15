@@ -15,6 +15,16 @@ nguoidung.getAll = async () => {
   return rows;
 };
 
+// Lấy user với phân trang
+nguoidung.getAllPaginated = async (limit, offset) => {
+  const [rows] = await pool.query("SELECT * FROM nguoidung ORDER BY thoi_gian_tao DESC LIMIT ? OFFSET ?", [limit, offset]);
+  const [countResult] = await pool.query("SELECT COUNT(*) as total FROM nguoidung");
+  return {
+    data: rows,
+    total: countResult[0].total
+  };
+};
+
 // Lấy user theo ID
 nguoidung.getById = async (id) => {
   const [rows] = await pool.query("SELECT * FROM nguoidung WHERE ID_NguoiDung = ?", [id]);

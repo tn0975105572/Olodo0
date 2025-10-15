@@ -36,6 +36,69 @@ baidang.getAllWithDetails = async () => {
   }));
 };
 
+// Lấy baidang với phân trang và filter
+baidang.getAllWithDetailsPaginated = async (limit, offset, status = 'all', search = '') => {
+  let whereConditions = [];
+  let queryParams = [];
+  
+  // Filter theo status
+  if (status && status !== 'all') {
+    whereConditions.push('b.trang_thai = ?');
+    queryParams.push(status);
+  }
+  
+  // Filter theo search
+  if (search) {
+    whereConditions.push('(b.tieu_de LIKE ? OR b.mo_ta LIKE ?)');
+    queryParams.push(`%${search}%`, `%${search}%`);
+  }
+  
+  const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+  
+  const query = `
+    SELECT 
+      b.*,
+      n.ho_ten as TenNguoiDung,
+      n.anh_dai_dien,
+      n.email,
+      lb.ten as TenLoaiBaiDang,
+      dm.ten as TenDanhMuc,
+      COUNT(DISTINCT ba.ID) as SoLuongAnh,
+      COUNT(DISTINCT lb_like.ID_BaiDang) as SoLuongLike,
+      COUNT(DISTINCT bc.ID_BinhLuan) as SoLuongBinhLuan,
+      GROUP_CONCAT(ba.LinkAnh ORDER BY ba.ID ASC SEPARATOR '|') as DanhSachAnh
+    FROM baidang b
+    LEFT JOIN nguoidung n ON b.ID_NguoiDung = n.ID_NguoiDung
+    LEFT JOIN loaibaidang lb ON b.ID_LoaiBaiDang = lb.ID_LoaiBaiDang
+    LEFT JOIN danhmuc dm ON b.ID_DanhMuc = dm.ID_DanhMuc
+    LEFT JOIN baidang_anh ba ON b.ID_BaiDang = ba.ID_BaiDang
+    LEFT JOIN likebaidang lb_like ON b.ID_BaiDang = lb_like.ID_BaiDang
+    LEFT JOIN binhluanbaidang bc ON b.ID_BaiDang = bc.ID_BaiDang
+    ${whereClause}
+    GROUP BY b.ID_BaiDang
+    ORDER BY b.thoi_gian_tao DESC
+    LIMIT ? OFFSET ?
+  `;
+  
+  queryParams.push(limit, offset);
+  const [rows] = await pool.query(query, queryParams);
+  
+  const countQuery = `
+    SELECT COUNT(DISTINCT b.ID_BaiDang) as total
+    FROM baidang b
+    ${whereClause}
+  `;
+  const [countResult] = await pool.query(countQuery, queryParams.slice(0, -2));
+  
+  return {
+    data: rows.map(row => ({
+      ...row,
+      DanhSachAnh: row.DanhSachAnh ? row.DanhSachAnh.split('|') : []
+    })),
+    total: countResult[0].total
+  };
+};
+
 // Lấy baidang theo ID với thông tin liên quan
 baidang.getByIdWithDetails = async (id) => {
   const query = `

@@ -48,7 +48,7 @@ api.interceptors.response.use(
 
 // API Services
 export const userAPI = {
-  getAll: () => api.get('/api/nguoidung/getAll'),
+  getAll: (page = 1, limit = 10) => api.get(`/api/nguoidung/getAll?page=${page}&limit=${limit}`),
   getById: (id: string) => api.get(`/api/nguoidung/get/${id}`),
   create: (data: any) => api.post('/api/nguoidung/create', data),
   update: (id: string, data: any) => api.put(`/api/nguoidung/update/${id}`, data),
@@ -57,13 +57,22 @@ export const userAPI = {
 };
 
 export const postAPI = {
-  getAll: () => api.get('/api/baidang/getAll'),
+  getAll: (page = 1, limit = 10, status = 'all', search = '') => {
+    let url = `/api/baidang/getAllWithDetails?page=${page}&limit=${limit}`;
+    if (status !== 'all') {
+      url += `&status=${status}`;
+    }
+    if (search) {
+      url += `&search=${encodeURIComponent(search)}`;
+    }
+    return api.get(url);
+  },
   getById: (id: string) => api.get(`/api/baidang/getById/${id}`),
   create: (data: any) => api.post('/api/baidang/create', data),
   update: (id: string, data: any) => api.put(`/api/baidang/update/${id}`, data),
   delete: (id: string) => api.delete(`/api/baidang/delete/${id}`),
   getByStatus: (status: string) => api.get(`/api/baidang/getByStatus/${status}`),
-  getAllWithDetails: () => api.get('/api/baidang/getAllWithDetails'),
+  getAllWithDetails: (page = 1, limit = 10) => api.get(`/api/baidang/getAllWithDetails?page=${page}&limit=${limit}`),
   getByUserId: (userId: string) => api.get(`/api/baidang/getByUserId/${userId}`),
   search: (keyword: string) => api.get(`/api/baidang/search?keyword=${keyword}`),
 };

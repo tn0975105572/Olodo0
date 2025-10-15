@@ -6,12 +6,21 @@ const pool = require("../config/database");
 // Lấy tất cả bài đăng với thông tin liên quan
 exports.getAllWithDetails = async (req, res) => {
   try {
-    const data = await baidang.getAllWithDetails();
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const status = req.query.status || 'all';
+    const search = req.query.search || '';
+    const offset = (page - 1) * limit;
+
+    const { data, total } = await baidang.getAllWithDetailsPaginated(limit, offset, status, search);
 
     res.json({
       success: true,
       data: data,
-      total: data.length,
+      total: total,
+      page: page,
+      limit: limit,
+      totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
     console.error("Error getting posts with details:", error);

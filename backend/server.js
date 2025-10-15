@@ -45,7 +45,7 @@ pool.getConnection()
   })
   .catch(err => console.error('Error connecting to MySQL:', err));
 
-const uploadDir = path.join(__dirname, "Uploads");
+const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -261,12 +261,80 @@ app.get('/api/recommendations/:userId', async (req, res) => {
 });
 
 app.post("/api/upload", upload.single("avatar"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "Không có file nào được tải lên." });
+  try {
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Không có file nào được tải lên." 
+      });
+    }
+
+    // Kiểm tra loại file
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      // Xóa file nếu không đúng định dạng
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ 
+        success: false,
+        error: "Chỉ cho phép tải lên file hình ảnh (JPG, PNG, GIF)." 
+      });
+    }
+
+    // Kiểm tra kích thước file (5MB)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (req.file.size > maxSize) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ 
+        success: false,
+        error: "File quá lớn. Kích thước tối đa là 5MB." 
+      });
+    }
+
+    const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+    console.log("✅ File đã được tải lên thành công:", fileUrl);
+    
+    res.json({ 
+      success: true,
+      imageUrl: fileUrl,
+      filename: req.file.filename,
+      size: req.file.size
+    });
+  } catch (error) {
+    console.error("❌ Lỗi khi upload file:", error);
+    res.status(500).json({ 
+      success: false,
+      error: "Lỗi server khi tải lên file." 
+    });
   }
-  const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-  console.log("File đã được tải lên thành công:", fileUrl);
-  res.json({ imageUrl: fileUrl });
+});
+
+// API xóa hình ảnh
+app.delete("/api/upload/:filename", (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const imagePath = path.join(uploadDir, filename);
+    
+    if (!fs.existsSync(imagePath)) {
+      return res.status(404).json({ 
+        success: false,
+        error: "File không tồn tại." 
+      });
+    }
+
+    fs.unlinkSync(imagePath);
+    console.log("✅ Đã xóa file:", filename);
+    
+    res.json({ 
+      success: true,
+      message: "Xóa file thành công." 
+    });
+  } catch (error) {
+    console.error("❌ Lỗi khi xóa file:", error);
+    res.status(500).json({ 
+      success: false,
+      error: "Lỗi server khi xóa file." 
+    });
+  }
 });
 
 app.use("/api", routes);

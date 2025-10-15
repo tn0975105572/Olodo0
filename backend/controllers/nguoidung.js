@@ -37,23 +37,33 @@ const authorizeRole = (...allowedRoles) => {
   };
 };
 
-// Async handler
+// Async handler với logging chi tiết
 const asyncHandler =
   (fn) =>
   (req, res, next) =>
-    Promise.resolve(fn(req, res, next)).catch(next);
+    Promise.resolve(fn(req, res, next)).catch((error) => {
+      console.error('❌ Controller Error:', {
+        controller: 'nguoidung',
+        method: req.method,
+        url: req.url,
+        error: error.message,
+        stack: error.stack
+      });
+      next(error);
+    });
 
 // 1️⃣ LOGIN (CÓ TOKEN)
 exports.login = asyncHandler(async (req, res) => {
-  const { email, mat_khau } = req.body;
-  console.log(`🔑 Login attempt for email: ${email}`);
+  try {
+    const { email, mat_khau } = req.body || {};
+    console.log(`🔑 Login attempt for email: ${email}`);
 
-  if (!email || !mat_khau) {
-    return res.status(400).json({
-      success: false,
-      message: "Vui lòng cung cấp email và mật khẩu.",
-    });
-  }
+    if (!email || !mat_khau) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng cung cấp email và mật khẩu.",
+      });
+    }
 
   const user = await nguoidung.getByEmail(email.trim());
   if (!user) {
@@ -80,22 +90,27 @@ exports.login = asyncHandler(async (req, res) => {
     { expiresIn: EXPIRES }
   );
 
-  res.status(200).json({
-    success: true,
-    message: "Đăng nhập thành công",
-    token,
-    user: userWithoutPassword,
-  });
+    res.status(200).json({
+      success: true,
+      message: "Đăng nhập thành công",
+      token,
+      user: userWithoutPassword,
+    });
+  } catch (error) {
+    console.error('❌ Login error:', error);
+    throw error;
+  }
 });
 exports.insert = asyncHandler(async (req, res) => {
-  const newData = { ...req.body };
+  try {
+    const newData = { ...(req.body || {}) };
 
-  if (!newData.email || !newData.mat_khau || !newData.ho_ten) {
-    return res.status(400).json({
-      success: false,
-      message: "Email, mật khẩu và họ tên là bắt buộc.",
-    });
-  }
+    if (!newData.email || !newData.mat_khau || !newData.ho_ten) {
+      return res.status(400).json({
+        success: false,
+        message: "Email, mật khẩu và họ tên là bắt buộc.",
+      });
+    }
 
   if (!newData.email.includes("@")) {
     return res.status(400).json({
@@ -112,18 +127,30 @@ exports.insert = asyncHandler(async (req, res) => {
     });
   }
 
-  const result = await nguoidung.insert(newData);
-  res.status(201).json({
-    success: true,
-    id: result.insertId,
-    message: "Tạo người dùng thành công.",
-  });
+    const result = await nguoidung.insert(newData);
+    res.status(201).json({
+      success: true,
+      id: result.insertId,
+      message: "Tạo người dùng thành công.",
+    });
+  } catch (error) {
+    console.error('❌ Insert user error:', error);
+    throw error;
+  }
 });
 
 // UPDATE USER (KHÔNG CẦN TOKEN, CHỈ CẦN ID)
 exports.update = asyncHandler(async (req, res) => {
-    const updatedData = { ...req.body };
-    const userId = req.params.id;
+    try {
+        const updatedData = { ...(req.body || {}) };
+        const userId = req.params.id;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: "ID người dùng là bắt buộc."
+            });
+        }
 
     const currentUser = await nguoidung.getById(userId);
     if (!currentUser) {
@@ -133,6 +160,7 @@ exports.update = asyncHandler(async (req, res) => {
         });
     }
 
+    // Xử lý mật khẩu
     if (updatedData.mat_khau_cu && updatedData.mat_khau) {
         const isOldPasswordValid = updatedData.mat_khau_cu.trim() === currentUser.mat_khau.trim();
         if (!isOldPasswordValid) {
@@ -147,6 +175,25 @@ exports.update = asyncHandler(async (req, res) => {
         delete updatedData.mat_khau_cu;
     }
 
+    // Xử lý xóa hình ảnh cũ khi cập nhật avatar mới
+    if (updatedData.anh_dai_dien && updatedData.anh_dai_dien !== currentUser.anh_dai_dien) {
+        if (currentUser.anh_dai_dien && 
+            currentUser.anh_dai_dien !== 'https://i.pravatar.cc/150' && 
+            currentUser.anh_dai_dien.includes('/uploads/')) {
+            try {
+                const uploadsDir = path.join(__dirname, '../uploads');
+                const oldImageFilename = path.basename(currentUser.anh_dai_dien);
+                const oldImagePath = path.join(uploadsDir, oldImageFilename);
+                if (fs.existsSync(oldImagePath)) {
+                    fs.unlinkSync(oldImagePath);
+                    console.log(`✅ Đã xóa hình ảnh cũ: ${oldImageFilename}`);
+                }
+            } catch (fileError) {
+                console.error('❌ Lỗi khi xóa hình ảnh cũ:', fileError);
+            }
+        }
+    }
+
     const affectedRows = await nguoidung.update(userId, updatedData);
     if (affectedRows === 0) {
         return res.status(404).json({
@@ -155,27 +202,44 @@ exports.update = asyncHandler(async (req, res) => {
         });
     }
 
-    res.status(200).json({
-        success: true,
-        message: "Cập nhật thành công.",
-        affectedRows,
-    });
+        res.status(200).json({
+            success: true,
+            message: "Cập nhật thành công.",
+            affectedRows,
+        });
+    } catch (error) {
+        console.error('❌ Update user error:', error);
+        throw error;
+    }
 });
 
-// GET ALL USERS (Không thay đổi)
+// GET ALL USERS với phân trang
 exports.getAll = asyncHandler(async (req, res) => {
-  const data = await nguoidung.getAll();
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
 
-  const users = data.map(user => {
-    const { mat_khau, ...userWithoutPassword } = user;
-    return userWithoutPassword;
-  });
+    const { data, total } = await nguoidung.getAllPaginated(limit, offset);
 
-  res.status(200).json({
-    success: true,
-    count: users.length,
-    data: users,
-  });
+    const users = data.map(user => {
+      const { mat_khau, ...userWithoutPassword } = user;
+      return userWithoutPassword;
+    });
+
+    res.status(200).json({
+      success: true,
+      count: users.length,
+      total: total,
+      page: page,
+      limit: limit,
+      totalPages: Math.ceil(total / limit),
+      data: users,
+    });
+  } catch (error) {
+    console.error('❌ Get all users error:', error);
+    throw error;
+  }
 });
 
 // GET USER BY ID (KHÔNG CẦN TOKEN)
@@ -197,42 +261,35 @@ exports.getById = asyncHandler(async (req, res) => {
 });
 
 exports.delete = asyncHandler(async (req, res) => {
-    const userId = req.params.id;
-    const { mat_khau } = req.body;
+    try {
+        const userId = req.params.id;
 
-    if (!mat_khau || mat_khau.trim() === '') {
-        return res.status(400).json({
-            success: false,
-            message: 'Vui lòng cung cấp mật khẩu để xác nhận xóa.',
-        });
-    }
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID người dùng là bắt buộc.'
+            });
+        }
 
-    const user = await nguoidung.getById(userId);
-    if (!user) {
-        return res.status(404).json({
-            success: false,
-            message: 'Người dùng không tồn tại.',
-        });
-    }
+        const user = await nguoidung.getById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'Người dùng không tồn tại.',
+            });
+        }
 
-    const isPasswordValid = mat_khau.trim() === user.mat_khau.trim();
-    if (!isPasswordValid) {
-        return res.status(401).json({
-            success: false,
-            message: 'Mật khẩu xác nhận không chính xác.',
-        });
-    }
-
-    if (user.anh_dai_dien && user.anh_dai_dien !== 'https://i.pravatar.cc/150') {
+    if (user.anh_dai_dien && user.anh_dai_dien !== 'https://i.pravatar.cc/150' && user.anh_dai_dien.includes('/uploads/')) {
         try {
             const uploadsDir = path.join(__dirname, '../uploads');
             const imageFilename = path.basename(user.anh_dai_dien);
             const imagePath = path.join(uploadsDir, imageFilename);
             if (fs.existsSync(imagePath)) {
                 fs.unlinkSync(imagePath);
+                console.log(`✅ Đã xóa file hình ảnh: ${imageFilename}`);
             }
         } catch (fileError) {
-            // Bỏ qua lỗi
+            console.error('❌ Lỗi khi xóa file hình ảnh:', fileError);
         }
     }
 
@@ -244,10 +301,14 @@ exports.delete = asyncHandler(async (req, res) => {
         });
     }
 
-    res.status(200).json({
-        success: true,
-        message: 'Xóa tài khoản thành công!',
-    });
+        res.status(200).json({
+            success: true,
+            message: 'Xóa tài khoản thành công!',
+        });
+    } catch (error) {
+        console.error('❌ Delete user error:', error);
+        throw error;
+    }
 });
 
 // VERIFY PASSWORD (KHÔNG CẦN TOKEN)

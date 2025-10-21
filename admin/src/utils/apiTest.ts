@@ -1,4 +1,5 @@
-import { userAPI, postAPI, pointsAPI } from '../services/api';
+import { userAPI, postAPI, pointsAPI, reportAPI } from '../services/api';
+import { API_CONFIG } from '../config/api';
 
 // Test API connection
 export const testApiConnection = async () => {
@@ -64,19 +65,30 @@ export const testSpecificEndpoints = async () => {
 
 // Health check
 export const healthCheck = async () => {
-  try {
-    const response = await fetch('http://localhost:3000/api/nguoidung/getAll');
-    if (response.ok) {
-      console.log('✅ Backend is healthy');
-      return true;
-    } else {
-      console.log('❌ Backend health check failed:', response.status);
-      return false;
+  const { ATTEMPTS, DELAY } = API_CONFIG.RETRY;
+
+  const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    try {
+      // Use a light, existing endpoint
+      const response = await reportAPI.getAll();
+      if (response.status === 200) {
+        console.log('✅ Backend is healthy');
+        return true;
+      }
+      console.warn('❌ Health check non-200:', response.status);
+    } catch (error) {
+      console.warn(`❌ Health check attempt ${attempt} failed`);
     }
-  } catch (error) {
-    console.error('❌ Backend is not reachable:', error);
-    return false;
+
+    if (attempt < ATTEMPTS) {
+      await wait(DELAY);
+    }
   }
+
+  console.error('❌ Backend is not reachable after retries');
+  return false;
 };
 
 

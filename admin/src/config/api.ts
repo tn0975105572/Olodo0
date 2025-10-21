@@ -72,13 +72,13 @@ export const API_CONFIG = {
     },
   },
   
-  // Request timeout
-  TIMEOUT: 10000,
+  // Request timeout (tăng lên 8s để đảm bảo ổn định)
+  TIMEOUT: 8000,
   
   // Retry configuration
   RETRY: {
-    ATTEMPTS: 3,
-    DELAY: 1000,
+    ATTEMPTS: 2, // Giảm từ 3 xuống 2
+    DELAY: 500,  // Giảm từ 1000ms xuống 500ms
   },
 };
 

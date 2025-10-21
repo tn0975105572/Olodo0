@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,11 @@ import {
   Alert,
   ActivityIndicator,
   SafeAreaView,
-  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 
 const API_BASE_URL = Constants.expoConfig!.extra!.apiUrl as string;
 
@@ -30,14 +30,15 @@ const XemVideoScreen = () => {
   const [isWatchingVideo, setIsWatchingVideo] = useState(false);
   const [watchTimer, setWatchTimer] = useState(0);
 
-  // Video thumbnails - có thể thay đổi thành video thật
-  const videoThumbnails = [
-    'https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg',
-    'https://img.youtube.com/vi/jNQXAC9IVRw/maxresdefault.jpg',
-    'https://img.youtube.com/vi/9bZkp7q19f0/maxresdefault.jpg',
+  // Video URLs thật - Sample videos miễn phí
+  const videoUrls = [
+    'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+    'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
   ];
 
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const videoRef = useRef<Video>(null);
 
   const loadUserData = useCallback(async () => {
     try {
@@ -68,7 +69,7 @@ const XemVideoScreen = () => {
     checkTodayWatched();
   }, [loadUserData, checkTodayWatched]);
 
-  const startWatching = () => {
+  const startWatching = async () => {
     if (hasWatchedToday) {
       Alert.alert('Thông báo', 'Bạn đã xem video hôm nay rồi!');
       return;
@@ -78,22 +79,43 @@ const XemVideoScreen = () => {
     setWatchProgress(0);
     setWatchTimer(0);
 
-    // Simulate watching video for 15 seconds
-    const interval = setInterval(() => {
-      setWatchTimer(prev => {
-        const newTime = prev + 1;
-        const progress = (newTime / 15) * 100;
-        setWatchProgress(progress);
+    try {
+      // Phát video thật
+      if (videoRef.current) {
+        await videoRef.current.playAsync();
+      }
+    } catch (error) {
+      console.error('Error playing video:', error);
+    }
+  };
 
-        if (newTime >= 15) {
-          clearInterval(interval);
-          setIsWatchingVideo(false);
-          awardPoints();
-        }
+  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (!status.isLoaded) return;
 
-        return newTime;
-      });
-    }, 1000);
+    if (status.isPlaying) {
+      // Cập nhật progress khi video đang phát
+      const currentTime = status.positionMillis / 1000;
+      const duration = status.durationMillis ? status.durationMillis / 1000 : 15;
+      const progress = (currentTime / duration) * 100;
+      
+      setWatchTimer(Math.floor(currentTime));
+      setWatchProgress(progress);
+
+      // Nếu đã xem đủ 15 giây, dừng và cộng điểm
+      if (currentTime >= 15) {
+        videoRef.current?.pauseAsync();
+        setIsWatchingVideo(false);
+        awardPoints();
+      }
+    }
+
+    if (status.didJustFinish) {
+      setIsWatchingVideo(false);
+      // Nếu video kết thúc sớm hơn 15s, vẫn cộng điểm
+      if (watchTimer >= 15) {
+        awardPoints();
+      }
+    }
   };
 
   const awardPoints = async () => {
@@ -150,17 +172,29 @@ const XemVideoScreen = () => {
     }
   };
 
-  const nextVideo = () => {
-    if (currentVideoIndex < videoThumbnails.length - 1) {
+  const nextVideo = async () => {
+    if (currentVideoIndex < videoUrls.length - 1) {
       setCurrentVideoIndex(currentVideoIndex + 1);
       setWatchProgress(0);
+      setWatchTimer(0);
+      setIsWatchingVideo(false);
+      if (videoRef.current) {
+        await videoRef.current.stopAsync();
+        await videoRef.current.setPositionAsync(0);
+      }
     }
   };
 
-  const prevVideo = () => {
+  const prevVideo = async () => {
     if (currentVideoIndex > 0) {
       setCurrentVideoIndex(currentVideoIndex - 1);
       setWatchProgress(0);
+      setWatchTimer(0);
+      setIsWatchingVideo(false);
+      if (videoRef.current) {
+        await videoRef.current.stopAsync();
+        await videoRef.current.setPositionAsync(0);
+      }
     }
   };
 
@@ -202,21 +236,25 @@ const XemVideoScreen = () => {
         )}
       </View>
 
-      {/* Video Player */}
+      {/* Video Player THẬT */}
       <View style={styles.videoContainer}>
-        <View style={styles.videoThumbnail}>
-          <Image
-            source={{ uri: videoThumbnails[currentVideoIndex] }}
-            style={styles.thumbnailImage}
-            resizeMode="cover"
-          />
-          {isWatchingVideo && (
-            <View style={styles.watchingOverlay}>
-              <ActivityIndicator size="large" color="#fff" />
-              <Text style={styles.watchingText}>Đang xem video...</Text>
-            </View>
-          )}
-        </View>
+        <Video
+          ref={videoRef}
+          source={{ uri: videoUrls[currentVideoIndex] }}
+          style={styles.videoPlayer}
+          resizeMode={ResizeMode.CONTAIN}
+          shouldPlay={false}
+          isLooping={false}
+          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+          useNativeControls={false}
+          volume={1.0}
+        />
+        {!isWatchingVideo && (
+          <View style={styles.playOverlay}>
+            <Ionicons name="play-circle" size={80} color="rgba(255, 255, 255, 0.9)" />
+            <Text style={styles.playText}>Nhấn Play để xem</Text>
+          </View>
+        )}
         
         {/* Progress Bar */}
         <View style={styles.progressContainer}>
@@ -247,9 +285,9 @@ const XemVideoScreen = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.controlButton, currentVideoIndex === videoThumbnails.length - 1 && styles.disabledButton]}
+            style={[styles.controlButton, currentVideoIndex === videoUrls.length - 1 && styles.disabledButton]}
             onPress={nextVideo}
-            disabled={currentVideoIndex === videoThumbnails.length - 1 || isWatchingVideo}
+            disabled={currentVideoIndex === videoUrls.length - 1 || isWatchingVideo}
           >
             <Ionicons name="chevron-forward" size={24} color="#fff" />
           </TouchableOpacity>
@@ -353,31 +391,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     borderRadius: 12,
     overflow: 'hidden',
-  },
-  videoThumbnail: {
-    width: '100%',
-    height: 200,
     position: 'relative',
   },
-  thumbnailImage: {
+  videoPlayer: {
     width: '100%',
-    height: '100%',
+    height: 250,
   },
-  watchingOverlay: {
+  playOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    zIndex: 10,
+    pointerEvents: 'none',
   },
-  watchingText: {
+  playText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
     marginTop: 10,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
   },
   progressContainer: {
     flexDirection: 'row',

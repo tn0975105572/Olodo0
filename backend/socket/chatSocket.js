@@ -1,5 +1,6 @@
 const pool = require("../config/database");
 const { v4: uuidv4 } = require('uuid');
+const thongbao = require('../models/thongbao');
 
 class ChatSocket {
   constructor(io) {
@@ -257,6 +258,19 @@ class ChatSocket {
 
       // Lưu vào database
       await pool.query("INSERT INTO tinnhan SET ?", [messageData]);
+
+      // 🔔 TẠO THÔNG BÁO CHO TIN NHẮN RIÊNG TƯ
+      if (ID_NguoiNhan && !ID_GroupChat) {
+        try {
+          await thongbao.createMessageNotification(
+            ID_NguoiNhan,  // người nhận
+            ID_NguoiGui,   // người gửi
+            this.io        // Socket.IO instance
+          );
+        } catch (notifError) {
+          console.error('Lỗi tạo thông báo:', notifError.message);
+        }
+      }
 
       // Lấy thông tin đầy đủ của tin nhắn
       const [messageRows] = await pool.query(`

@@ -143,6 +143,8 @@
   justify-content: center;
   position: relative;
   overflow: hidden;
+  /* Ensure icon above blur overlay */
+  z-index: 0;
 }
 
 .stat-icon::before {
@@ -152,8 +154,9 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.06);
+  /* Reduce blur to keep icon sharp */
+  backdrop-filter: blur(2px);
   border-radius: var(--radius-xl);
 }
 
@@ -164,6 +167,13 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* Ensure the SVG icons are fully opaque and above overlays */
+.stat-icon svg {
+  position: relative;
+  z-index: 1;
+  opacity: 1;
 }
 
 .stat-value {

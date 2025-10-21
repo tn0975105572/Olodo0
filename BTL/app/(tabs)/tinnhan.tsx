@@ -242,7 +242,7 @@ const ChatListScreen = () => {
   );
 };
 
-const PRIMARY_COLOR = '#7f001f';
+const PRIMARY_COLOR = '#9a0002';
 const LIGHT_GRAY = '#f0f0f0';
 const BACKGROUND_GRAY = '#fffcef';
 

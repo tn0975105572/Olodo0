@@ -16,12 +16,14 @@ import {
   Alert,
   Dimensions,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { io } from 'socket.io-client';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 
 // Import các bộ icon
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -213,6 +215,11 @@ const MessageItem = ({ item, currentUserId, onMessagePress, onImagePress, recall
   // Nếu tin nhắn đã bị thu hồi (từ recalledMessages hoặc da_xoa_gui = 1), hiển thị thông báo thu hồi
   if (isRecalled) {
     return <RecallNotification messageId={item.id} isMyMessage={isMyMessage} />;
+  }
+
+  // Nếu là tin nhắn vị trí
+  if (item.location) {
+    return <LocationMessage item={item} isMyMessage={isMyMessage} />;
   }
 
   // Nếu là tin nhắn media (ảnh/video)
@@ -419,15 +426,57 @@ const PostShareForm = ({ postData, onSend, onCancel, inputText, setInputText }) 
   );
 };
 
+// --- COMPONENT CON: TIN NHẮN VỊ TRÍ ---
+const LocationMessage = ({ item, isMyMessage }) => {
+  const handleOpenMap = () => {
+    if (item.location) {
+      const url = `https://www.google.com/maps?q=${item.location.latitude},${item.location.longitude}`;
+      Linking.openURL(url);
+    }
+  };
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.messageItemContainer,
+        isMyMessage ? styles.myMessageContainer : styles.otherMessageContainer,
+      ]}
+      onPress={handleOpenMap}
+      activeOpacity={0.7}
+    >
+      <View
+        style={[
+          styles.bubbleBase,
+          isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble,
+          styles.locationBubble,
+        ]}
+      >
+        <View style={styles.locationIcon}>
+          <Ionicons name="location" size={40} color={isMyMessage ? '#fff' : PRIMARY_COLOR} />
+        </View>
+        <Text style={[styles.locationText, isMyMessage ? styles.myMessageText : styles.otherMessageText]}>
+          📍 Vị trí của tôi
+        </Text>
+        <Text style={[styles.locationSubtext, isMyMessage ? { color: '#f0f0f0' } : { color: '#666' }]}>
+          Nhấn để xem trên bản đồ
+        </Text>
+      </View>
+      <Text style={[styles.timestamp, isMyMessage ? styles.myTimestamp : styles.otherTimestamp]}>
+        {item.timestamp}
+      </Text>
+    </TouchableOpacity>
+  );
+};
+
 // --- COMPONENT CON: KHUNG NHẬP LIỆU ---
-const InputBar = ({ onSend, inputText, setInputText, onImagePress }) => {
+const InputBar = ({ onSend, inputText, setInputText, onImagePress, onLocationPress }) => {
   return (
     <View style={styles.inputContainer}>
       <TouchableOpacity style={styles.inputIconButton} onPress={onImagePress}>
         <Ionicons name="image" size={24} color="#555" />
       </TouchableOpacity>
-      <TouchableOpacity style={styles.inputIconButton}>
-        <Ionicons name="happy-outline" size={24} color="#555" />
+      <TouchableOpacity style={styles.inputIconButton} onPress={onLocationPress}>
+        <Ionicons name="location" size={24} color="#555" />
       </TouchableOpacity>
 
       <TextInput
@@ -620,19 +669,30 @@ const ChatDetailScreen = () => {
               data.message.file_dinh_kem && data.message.file_dinh_kem.trim()
             );
 
+            // Extract location from message
+            let location: any = null;
+            const messageText = data.message.noi_dung || '';
+            if (messageText.includes('📍 Vị trí GPS:')) {
+              const match = messageText.match(/maps\?q=([-\d.]+),([-\d.]+)/);
+              if (match) {
+                location = {
+                  latitude: parseFloat(match[1]),
+                  longitude: parseFloat(match[2]),
+                };
+              }
+            }
+
             // Extract postId and postImage if it's a shared post message
             let postId = null;
             let postImage = null;
-            if (data.message.noi_dung && data.message.noi_dung.includes('📱 Bài đăng:')) {
-              // Try to extract postId from the message or store it separately
-              // For now, we'll set it to null and handle it later
+            if (messageText.includes('📱 Bài đăng:')) {
               postId = null;
               postImage = null;
             }
 
             const newMessage = {
               id: data.message.ID_TinNhan,
-              text: data.message.noi_dung || '',
+              text: messageText,
               senderId: data.message.ID_NguoiGui,
               timestamp: new Date(data.message.thoi_gian_gui).toLocaleTimeString([], {
                 hour: '2-digit',
@@ -640,10 +700,11 @@ const ChatDetailScreen = () => {
               }),
               file_dinh_kem: data.message.file_dinh_kem,
               loai_tin_nhan: isImageMessage ? 'image' : 'text',
-              mediaUri: null, // Để null để logic tạo full URL trong MediaMessage chạy
+              mediaUri: null,
               da_xoa_gui: data.message.da_xoa_gui || 0,
-              postId: postId, // Add postId for shared posts
-              postImage: postImage, // Add postImage for shared posts
+              postId: postId,
+              postImage: postImage,
+              location: location, // Add location data
             };
             setMessages((prevMessages) => [...prevMessages, newMessage]);
             setTimeout(() => {
@@ -817,12 +878,22 @@ const ChatDetailScreen = () => {
               }
             }
 
+            // Extract location from message
+            let location: any = null;
+            if (text && text.includes('📍 Vị trí GPS:')) {
+              const match = text.match(/maps\?q=([-\d.]+),([-\d.]+)/);
+              if (match) {
+                location = {
+                  latitude: parseFloat(match[1]),
+                  longitude: parseFloat(match[2]),
+                };
+              }
+            }
+
             // Extract postId and postImage if it's a shared post message
             let postId = null;
             let postImage = null;
             if (text && text.includes('📱 Bài đăng:')) {
-              // For existing messages, we don't have postId stored
-              // We'll need to handle this differently or store postId in database
               postId = null;
               postImage = null;
             }
@@ -837,10 +908,11 @@ const ChatDetailScreen = () => {
               }),
               file_dinh_kem: filename,
               loai_tin_nhan: isImageMessage ? 'image' : 'text',
-              mediaUri: null, // Để null để logic tạo full URL trong MediaMessage chạy
-              da_xoa_gui: msg.da_xoa_gui || 0, // Thêm trường da_xoa_gui từ database
-              postId: postId, // Add postId for shared posts
-              postImage: postImage, // Add postImage for shared posts
+              mediaUri: null,
+              da_xoa_gui: msg.da_xoa_gui || 0,
+              postId: postId,
+              postImage: postImage,
+              location: location, // Add location data
             };
           });
 
@@ -1322,6 +1394,101 @@ const ChatDetailScreen = () => {
     setSelectedImages([]);
   };
 
+  // Chia sẻ vị trí
+  const handleShareLocation = async () => {
+    try {
+      // Xin quyền truy cập location
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Quyền truy cập vị trí',
+          'Vui lòng cấp quyền truy cập vị trí để chia sẻ'
+        );
+        return;
+      }
+
+      // Hiển thị loading
+      Alert.alert('📍 Đang lấy vị trí...', 'Vui lòng đợi');
+
+      // Lấy vị trí hiện tại
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const { latitude, longitude } = location.coords;
+
+      // Tạo tin nhắn tạm với vị trí
+      const tempMessage = {
+        id: 'temp_location_' + Date.now(),
+        text: '',
+        senderId: currentUserId,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        location: {
+          latitude,
+          longitude,
+        },
+      };
+
+      setMessages((prev) => [...prev, tempMessage]);
+
+      // Cuộn xuống
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      // Gửi vị trí qua socket hoặc API
+      const locationText = `📍 Vị trí GPS: https://www.google.com/maps?q=${latitude},${longitude}`;
+
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('send_message', {
+          ID_NguoiGui: currentUserId,
+          ID_NguoiNhan: otherUser.id,
+          noi_dung: locationText,
+          loai_tin_nhan: 'text',
+          file_dinh_kem: null,
+          tin_nhan_phu_thuoc: null,
+        });
+      } else {
+        // Fallback: gửi qua HTTP API
+        const apiUrl = Constants.expoConfig?.extra?.apiUrl;
+        if (!apiUrl) return;
+
+        const response = await fetch(`${apiUrl}/api/tinnhan/send`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${userToken}`,
+          },
+          body: JSON.stringify({
+            ID_NguoiGui: currentUserId,
+            ID_NguoiNhan: otherUser.id,
+            noi_dung: locationText,
+            loai_tin_nhan: 'text',
+            file_dinh_kem: null,
+            tin_nhan_phu_thuoc: null,
+          }),
+        });
+
+        if (response && response.ok) {
+          const data = await response.json();
+          setMessages((prevMessages) =>
+            prevMessages.map((msg) =>
+              msg.id === tempMessage.id
+                ? { ...msg, id: data.data?.ID_TinNhan || tempMessage.id }
+                : msg
+            )
+          );
+        }
+      }
+
+      Alert.alert('✅ Thành công', 'Đã chia sẻ vị trí của bạn');
+    } catch (error) {
+      console.error('Error sharing location:', error);
+      Alert.alert('Lỗi', 'Không thể lấy vị trí. Vui lòng kiểm tra GPS và thử lại.');
+    }
+  };
+
   // Hàm gửi ảnh qua HTTP API (fallback)
   const sendImageViaHTTP = async (messageData: any, tempMessage: any) => {
     try {
@@ -1676,6 +1843,7 @@ const ChatDetailScreen = () => {
             inputText={inputText}
             setInputText={setInputText}
             onImagePress={handleSelectImages}
+            onLocationPress={handleShareLocation}
           />
         </KeyboardAvoidingView>
 
@@ -2283,6 +2451,25 @@ const styles = StyleSheet.create({
   postShareCardSubtitle: {
     fontSize: 12,
     opacity: 0.8,
+  },
+  // Location Message Styles
+  locationBubble: {
+    paddingVertical: 15,
+    paddingHorizontal: 18,
+    minWidth: 200,
+    alignItems: 'center',
+  },
+  locationIcon: {
+    marginBottom: 8,
+  },
+  locationText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  locationSubtext: {
+    fontSize: 12,
+    fontStyle: 'italic',
   },
 });
 

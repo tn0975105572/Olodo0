@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Users, FileText, Star, TrendingUp, Activity, DollarSign, Wifi, WifiOff } from 'lucide-react';
+import { Users, FileText, Star, TrendingUp, Activity, Wifi, WifiOff, Heart } from 'lucide-react';
 import { motion } from 'framer-motion';
-import toast from 'react-hot-toast';
-import { userAPI, postAPI, pointsAPI } from '../services/api';
+import { userAPI, postAPI, pointsAPI, likeAPI } from '../services/api';
 import { SkeletonCard, SkeletonChart } from '../components/Skeleton';
-import { testApiConnection, healthCheck } from '../utils/apiTest';
+import { healthCheck } from '../utils/apiTest';
 import './Dashboard.css';
 
 interface Stats {
   totalUsers: number;
   totalPosts: number;
   totalPoints: number;
-  activeUsers: number;
+  totalLikes: number;
 }
 
 const Dashboard = () => {
@@ -19,7 +18,7 @@ const Dashboard = () => {
     totalUsers: 0,
     totalPosts: 0,
     totalPoints: 0,
-    activeUsers: 0,
+    totalLikes: 0,
   });
   const [loading, setLoading] = useState(true);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
@@ -38,33 +37,36 @@ const Dashboard = () => {
       setApiConnected(isHealthy);
       
       if (!isHealthy) {
-        toast.error('Không thể kết nối đến backend API');
         return;
       }
       
-      const [usersRes, postsRes, pointsRes] = await Promise.all([
+      // Load 4 APIs thật từ backend
+      const [usersRes, postsRes, pointsRes, likesRes] = await Promise.all([
         userAPI.getAll(),
-        postAPI.getAll(),
+        postAPI.getAllWithDetails(),
         pointsAPI.getOverallStats(),
+        likeAPI.getAll(),
       ]);
 
+      // Tính tổng điểm từ stats array
+      const totalPointsCalc = pointsRes.data.reduce((sum: number, stat: any) => {
+        return sum + parseInt(stat.tong_diem_thay_doi || 0);
+      }, 0);
+
       setStats({
-        totalUsers: usersRes.data.length || 0,
-        totalPosts: postsRes.data.length || 0,
-        totalPoints: pointsRes.data.totalPoints || 0,
-        activeUsers: usersRes.data.filter((u: any) => u.trang_thai === 'hoat_dong').length || 0,
+        totalUsers: usersRes.data.total || usersRes.data.length || 0,
+        totalPosts: postsRes.data.total || postsRes.data.length || 0,
+        totalPoints: totalPointsCalc,
+        totalLikes: likesRes.data.length || 0,
       });
 
       // Get recent point history
       const historyRes = await pointsAPI.getHistory();
       setRecentActivities(historyRes.data.slice(0, 10));
 
-      toast.success('Dữ liệu đã được cập nhật!');
-
     } catch (error) {
       console.error('Error loading dashboard:', error);
       setApiConnected(false);
-      toast.error('Không thể tải dữ liệu dashboard');
     } finally {
       setLoading(false);
     }
@@ -99,12 +101,12 @@ const Dashboard = () => {
       changeType: 'positive'
     },
     {
-      title: 'Người dùng hoạt động',
-      value: stats.activeUsers,
-      icon: TrendingUp,
-      color: '#791228',
+      title: 'Tổng lượt thích',
+      value: stats.totalLikes,
+      icon: Heart,
+      color: '#E91E63',
       bgColor: '#FCE4EC',
-      change: '+5%',
+      change: '+25%',
       changeType: 'positive'
     },
   ];
@@ -140,7 +142,6 @@ const Dashboard = () => {
                 title="API Connected"
               >
                 <Wifi size={16} />
-                <span>API</span>
               </motion.div>
             )}
             {apiConnected === false && (
@@ -151,7 +152,6 @@ const Dashboard = () => {
                 title="API Disconnected"
               >
                 <WifiOff size={16} />
-                <span>API</span>
               </motion.div>
             )}
           </div>

@@ -1,4 +1,5 @@
 const likebaidang = require('../models/likebaidang');
+const thongbao = require('../models/thongbao');
 const { v4: uuidv4 } = require("uuid");
 const pool = require("../config/database");
 
@@ -51,7 +52,7 @@ exports.insert = async (req, res) => {
       console.error('Error adding points for like:', pointError);
     }
 
-    // Thêm điểm cho chủ bài đăng
+    // Thêm điểm cho chủ bài đăng và tạo thông báo
     try {
       // Lấy thông tin chủ bài đăng
       const [postOwner] = await pool.query(
@@ -60,13 +61,23 @@ exports.insert = async (req, res) => {
       );
       
       if (postOwner[0] && postOwner[0].ID_NguoiDung !== userId) {
+        const postOwnerId = postOwner[0].ID_NguoiDung;
+        
+        // Thêm điểm
         await pool.query('CALL AddPointsToUser(?, ?, ?, ?, ?)', [
-          postOwner[0].ID_NguoiDung,
+          postOwnerId,
           3, // +3 điểm khi nhận like
           'nhan_like',
           'Nhận like cho bài đăng',
           postId
         ]);
+
+        // Tạo thông báo với Socket.IO
+        try {
+          await thongbao.createLikeNotification(postId, postOwnerId, userId, req.io);
+        } catch (notifError) {
+          console.error('Error creating like notification:', notifError);
+        }
       }
     } catch (pointError) {
       console.error('Error adding points for received like:', pointError);

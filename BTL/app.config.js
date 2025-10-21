@@ -51,6 +51,8 @@ export default {
         'android.permission.WRITE_EXTERNAL_STORAGE',
         'android.permission.ACCESS_MEDIA_LOCATION',
         'android.permission.RECORD_AUDIO',
+        'android.permission.ACCESS_FINE_LOCATION',
+        'android.permission.ACCESS_COARSE_LOCATION',
       ],
       package: 'com.anonymous.OLODO',
       usesCleartextTraffic: true, // Cho phép kết nối HTTP
@@ -76,6 +78,13 @@ export default {
         {
           cameraPermission:
             'Cho phép $(PRODUCT_NAME) truy cập camera để bạn có thể chụp ảnh và quay video.',
+        },
+      ],
+      [
+        'expo-location',
+        {
+          locationAlwaysAndWhenInUsePermission:
+            'Cho phép $(PRODUCT_NAME) truy cập vị trí của bạn để chia sẻ vị trí trong chat.',
         },
       ],
       [

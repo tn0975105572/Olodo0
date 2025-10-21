@@ -19,6 +19,7 @@ import { Ionicons, FontAwesome5, MaterialCommunityIcons, FontAwesome } from '@ex
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import Toast from 'react-native-toast-message';
+import { io } from 'socket.io-client';
 
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl as string;
 const API_URLS = {
@@ -107,6 +108,66 @@ const MOCK_PEOPLE_YOU_MAY_KNOW: FeedItem = { type: 'people_you_may_know' };
 
 const AppHeader = () => {
   const navigation = useNavigation<any>();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Load notification count
+  const loadUnreadCount = async () => {
+    try {
+      const userInfo = await AsyncStorage.getItem('userInfo');
+      if (userInfo) {
+        const user = JSON.parse(userInfo);
+        const userId = user.ID_NguoiDung;
+        if (userId) {
+          const response = await fetch(`${API_BASE_URL}/api/thongbao/unread/${userId}`);
+          const data = await response.json();
+          if (data.success) {
+            setUnreadCount(data.unread_count || 0);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading unread count:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadUnreadCount();
+    
+    // 🔔 Kết nối Socket.IO để cập nhật badge ngay lập tức
+    const setupSocket = async () => {
+      const userInfo = await AsyncStorage.getItem('userInfo');
+      if (userInfo) {
+        const user = JSON.parse(userInfo);
+        const userId = user.ID_NguoiDung;
+        if (userId) {
+          try {
+            const socket = io(API_BASE_URL);
+            
+            socket.on('connect', () => {
+              // Socket connected
+            });
+            
+            // Lắng nghe thông báo mới
+            socket.on(`notification_${userId}`, (data: any) => {
+              // Reload badge count ngay lập tức
+              loadUnreadCount();
+            });
+            
+            return () => socket.disconnect();
+          } catch (error) {
+            // Silent error
+          }
+        }
+      }
+    };
+    
+    setupSocket();
+    
+    // Fallback: Reload every 30 seconds nếu socket fail
+    const interval = setInterval(loadUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <View className="flex-row justify-between items-center px-4 py-2 bg-white border-b border-[#EEEEEE]">
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
@@ -115,7 +176,7 @@ const AppHeader = () => {
         <TouchableOpacity onPress={() => router.push('/components/Home/timkiem')}>
           <Ionicons name="search" size={24} color={COLORS.text} style={{ marginLeft: 20 }} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('TinNhan')}>
+        <TouchableOpacity onPress={() => navigation.navigate('tinnhan')}>
           <View>
             <MaterialCommunityIcons
               name="message-text-outline"
@@ -126,8 +187,37 @@ const AppHeader = () => {
             <View className="absolute -right-1 -top-1 w-2 h-2 rounded-full bg-[#7f001f] border border-white" />
           </View>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push('/components/Home/thongbao')}>
-          <FontAwesome name="bell-o" size={24} color={COLORS.text} style={{ marginLeft: 20 }} />
+        <TouchableOpacity 
+          onPress={() => {
+            router.push('/components/Home/thongbao');
+            loadUnreadCount(); // Refresh sau khi vào thông báo
+          }}
+        >
+          <View style={{ marginLeft: 20 }}>
+            <FontAwesome name="bell-o" size={24} color={COLORS.text} />
+            {unreadCount > 0 && (
+              <View style={{
+                position: 'absolute',
+                right: -6,
+                top: -4,
+                backgroundColor: '#ff0000',
+                borderRadius: 10,
+                minWidth: 18,
+                height: 18,
+                justifyContent: 'center',
+                alignItems: 'center',
+                paddingHorizontal: 4,
+              }}>
+                <Text style={{
+                  color: '#fff',
+                  fontSize: 10,
+                  fontWeight: 'bold',
+                }}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
     </View>

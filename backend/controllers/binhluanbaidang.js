@@ -1,4 +1,5 @@
 const binhluanbaidang = require('../models/binhluanbaidang');
+const thongbao = require('../models/thongbao');
 const { v4: uuidv4 } = require('uuid'); // Dùng để tạo ID duy nhất
 const pool = require("../config/database");
 
@@ -80,7 +81,7 @@ exports.insert = async (req, res) => {
             console.error('Error adding points for comment:', pointError);
         }
 
-        // Thêm điểm cho chủ bài đăng
+        // Thêm điểm cho chủ bài đăng và tạo thông báo
         try {
             // Lấy thông tin chủ bài đăng
             const [postOwner] = await pool.query(
@@ -89,13 +90,23 @@ exports.insert = async (req, res) => {
             );
             
             if (postOwner[0] && postOwner[0].ID_NguoiDung !== userId) {
+                const postOwnerId = postOwner[0].ID_NguoiDung;
+                
+                // Thêm điểm
                 await pool.query('CALL AddPointsToUser(?, ?, ?, ?, ?)', [
-                    postOwner[0].ID_NguoiDung,
+                    postOwnerId,
                     10, // +10 điểm khi nhận bình luận
                     'nhan_binh_luan',
                     'Nhận bình luận cho bài đăng',
                     postId
                 ]);
+
+                // Tạo thông báo với Socket.IO
+                try {
+                    await thongbao.createCommentNotification(postId, postOwnerId, userId, req.io);
+                } catch (notifError) {
+                    console.error('Error creating comment notification:', notifError);
+                }
             }
         } catch (pointError) {
             console.error('Error adding points for received comment:', pointError);

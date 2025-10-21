@@ -1,5 +1,5 @@
 import axios, { AxiosResponse, AxiosError } from 'axios';
-import { API_CONFIG, ApiResponse, ApiError } from '../config/api';
+import { API_CONFIG, ApiError } from '../config/api';
 
 const api = axios.create({
   baseURL: API_CONFIG.BASE_URL,

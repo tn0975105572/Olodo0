@@ -1,4 +1,5 @@
 const tinnhan = require('../models/tinnhan');
+const thongbao = require('../models/thongbao');
 
 // Lấy tất cả tin nhắn
 exports.getAll = async (req, res) => {
@@ -129,10 +130,23 @@ exports.sendMessage = async (req, res) => {
             });
         }
         
-        const messageId = await tinnhan.insert(messageData);
+       
         
-        // Lấy thông tin đầy đủ của tin nhắn để gửi qua socket
+        const messageId = await tinnhan.insert(messageData);
         const fullMessage = await tinnhan.getById(messageId);
+        
+        // 🔔 Tạo thông báo cho tin nhắn riêng tư
+        if (messageData.ID_NguoiNhan && !messageData.ID_GroupChat) {
+            try {
+                await thongbao.createMessageNotification(
+                    messageData.ID_NguoiNhan,
+                    messageData.ID_NguoiGui,
+                    req.io
+                );
+            } catch (notifError) {
+                console.error('Lỗi tạo thông báo:', notifError.message);
+            }
+        }
         
         // Gửi tin nhắn qua Socket.io
         if (req.io) {
@@ -380,6 +394,21 @@ exports.uploadAndSendMessage = async (req, res) => {
         
         // Lấy thông tin đầy đủ của tin nhắn để gửi qua socket
         const fullMessage = await tinnhan.getById(messageId);
+        
+        // 🔔 Tạo thông báo cho tin nhắn riêng tư (không tạo cho group chat)
+        if (messageData.ID_NguoiNhan && !messageData.ID_GroupChat) {
+            try {
+                await thongbao.createMessageNotification(
+                    messageData.ID_NguoiNhan, // người nhận
+                    messageData.ID_NguoiGui,  // người gửi
+                    req.io                     // Socket.IO
+                );
+                console.log('✅ Thông báo tin nhắn (file) đã được tạo cho user:', messageData.ID_NguoiNhan);
+            } catch (notifError) {
+                console.error('❌ Lỗi tạo thông báo tin nhắn:', notifError);
+                // Không fail request nếu thông báo lỗi
+            }
+        }
         
         // Gửi tin nhắn qua Socket.io
         if (req.io) {
